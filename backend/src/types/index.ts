@@ -1,8 +1,17 @@
 export type EntityId = number;
 export type Timestamp = string;
 
-export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
-export type TicketPriority = "low" | "medium" | "high" | "urgent";
+export const TICKET_STATUSES = [
+  "open",
+  "in_progress",
+  "resolved",
+  "closed",
+] as const;
+
+export const TICKET_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
+
+export type TicketStatus = (typeof TICKET_STATUSES)[number];
+export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
 export type Company = {
   id: EntityId;
@@ -35,6 +44,10 @@ export type Ticket = {
 
 export type CompanySummary = Pick<Company, "id" | "name">;
 export type ContactSummary = Pick<Contact, "id" | "name">;
+
+export type ContactWithCompany = Contact & {
+  company: CompanySummary;
+};
 
 export type RichTicket = Omit<Ticket, "contact_id" | "company_id"> & {
   company: CompanySummary;

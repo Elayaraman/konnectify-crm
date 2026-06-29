@@ -1,0 +1,15 @@
+{
+  "name": "konnectify-crm",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm --parallel --filter konnectify-backend --filter konnectify-frontend dev",
+    "format": "prettier --write \"**/*.{css,html,json,md,ts,tsx}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}
