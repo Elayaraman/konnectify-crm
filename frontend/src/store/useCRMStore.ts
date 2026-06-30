@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { Company, Contact, CRMView, Ticket } from "@/types";
+import type { Company, Contact, CRMView, EntityId, Ticket } from "@/types";
 
 type CRMStore = {
   tickets: Ticket[];
@@ -13,10 +13,13 @@ type CRMStore = {
   setCurrentView: (view: CRMView) => void;
   addTicket: (ticket: Ticket) => void;
   updateTicket: (ticket: Ticket) => void;
+  removeTicket: (id: EntityId) => void;
   addContact: (contact: Contact) => void;
   updateContact: (contact: Contact) => void;
+  removeContact: (id: EntityId) => void;
   addCompany: (company: Company) => void;
   updateCompany: (company: Company) => void;
+  removeCompany: (id: EntityId) => void;
 };
 
 export const useCRMStore = create<CRMStore>((set) => ({
@@ -36,6 +39,10 @@ export const useCRMStore = create<CRMStore>((set) => ({
     set((state) => ({
       tickets: state.tickets.map((item) => (item.id === ticket.id ? ticket : item)),
     })),
+  removeTicket: (id) =>
+    set((state) => ({
+      tickets: state.tickets.filter((item) => item.id !== id),
+    })),
   addContact: (contact) =>
     set((state) => ({
       contacts: [contact, ...state.contacts],
@@ -46,6 +53,10 @@ export const useCRMStore = create<CRMStore>((set) => ({
         item.id === contact.id ? contact : item,
       ),
     })),
+  removeContact: (id) =>
+    set((state) => ({
+      contacts: state.contacts.filter((item) => item.id !== id),
+    })),
   addCompany: (company) =>
     set((state) => ({
       companies: [company, ...state.companies],
@@ -55,5 +66,9 @@ export const useCRMStore = create<CRMStore>((set) => ({
       companies: state.companies.map((item) =>
         item.id === company.id ? company : item,
       ),
+    })),
+  removeCompany: (id) =>
+    set((state) => ({
+      companies: state.companies.filter((item) => item.id !== id),
     })),
 }));

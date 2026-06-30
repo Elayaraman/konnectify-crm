@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
 import { useCRMStore } from "@/store/useCRMStore";
 import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types";
-import type { TicketPriority, TicketStatus } from "@/types";
+import type { Ticket, TicketPriority, TicketStatus } from "@/types";
 
-import { getTickets } from "./api";
+import { deleteTicket, getTickets } from "./api";
+import { TicketForm } from "./TicketForm";
 import { TicketTable } from "./TicketTable";
 
 type StatusFilter = TicketStatus | "";
@@ -30,11 +31,14 @@ function formatLabel(value: string): string {
 export function TicketsView() {
   const tickets = useCRMStore((state) => state.tickets);
   const setTickets = useCRMStore((state) => state.setTickets);
+  const removeTicket = useCRMStore((state) => state.removeTicket);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingTicket, setEditingTicket] = useState<Ticket | undefined>(undefined);
 
   const loadTickets = useCallback(async () => {
     setIsLoading(true);
@@ -68,8 +72,8 @@ export function TicketsView() {
           [
             ticket.title,
             ticket.description,
-            ticket.company.name,
-            ticket.contact.name,
+            ticket.company?.name ?? "",
+            ticket.contact?.name ?? "",
           ].join(" "),
         ).includes(query);
 
@@ -85,6 +89,29 @@ export function TicketsView() {
   const hasActiveFilters =
     search.trim().length > 0 || statusFilter.length > 0 || priorityFilter.length > 0;
 
+  function handleEdit(ticket: Ticket) {
+    setEditingTicket(ticket);
+    setIsFormOpen(true);
+  }
+
+  async function handleDelete(ticket: Ticket) {
+    if (!window.confirm(`Delete ticket #${ticket.id}: ${ticket.title}?`)) {
+      return;
+    }
+
+    try {
+      await deleteTicket(ticket.id);
+      removeTicket(ticket.id);
+    } catch {
+      // silently handle — user can retry
+    }
+  }
+
+  function handleFormClose() {
+    setIsFormOpen(false);
+    setEditingTicket(undefined);
+  }
+
   if (isLoading) {
     return <Loading title="Loading tickets" />;
   }
@@ -95,16 +122,19 @@ export function TicketsView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-          CRM
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
-          Tickets
-        </h1>
-        <p className="mt-2 text-sm text-neutral-500">
-          Track customer issues, ownership context, and resolution priority.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+            CRM
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
+            Tickets
+          </h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            Track customer issues, ownership context, and resolution priority.
+          </p>
+        </div>
+        <Button onClick={() => setIsFormOpen(true)}>New Ticket</Button>
       </div>
 
       <Card
@@ -170,10 +200,23 @@ export function TicketsView() {
               title="No tickets match your filters"
             />
           ) : (
-            <TicketTable tickets={filteredTickets} />
+            <TicketTable
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+              tickets={filteredTickets}
+            />
           )}
         </div>
       </Card>
+
+      {isFormOpen ? (
+        <TicketForm
+          key={editingTicket?.id ?? "new"}
+          onClose={handleFormClose}
+          open={isFormOpen}
+          ticket={editingTicket}
+        />
+      ) : null}
     </div>
   );
 }

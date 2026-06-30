@@ -347,4 +347,29 @@ router.patch("/:id", (req, res) => {
   }
 });
 
+router.delete("/:id", (req, res) => {
+  const id = parseIdParam(req.params.id);
+
+  if (!id) {
+    return error(res, "Ticket id must be a positive integer.", 400);
+  }
+
+  try {
+    const deleted = ticketService.delete(id);
+
+    if (!deleted) {
+      return error(res, "Ticket not found.", 404);
+    }
+
+    return success(res, { id });
+  } catch (caughtError) {
+    return error(
+      res,
+      "Failed to delete ticket.",
+      500,
+      caughtError instanceof Error ? caughtError.message : undefined,
+    );
+  }
+});
+
 export default router;

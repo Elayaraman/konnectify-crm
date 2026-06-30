@@ -179,7 +179,7 @@ function createSchema() {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       phone TEXT NOT NULL,
-      company_id INTEGER NOT NULL,
+      company_id INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
     );
@@ -190,8 +190,8 @@ function createSchema() {
       description TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
       priority TEXT NOT NULL CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-      contact_id INTEGER NOT NULL,
-      company_id INTEGER NOT NULL,
+      contact_id INTEGER,
+      company_id INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,

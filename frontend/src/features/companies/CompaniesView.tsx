@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
 import { useCRMStore } from "@/store/useCRMStore";
+import type { Company } from "@/types";
 
-import { getCompanies } from "./api";
+import { deleteCompany, getCompanies } from "./api";
+import { CompanyForm } from "./CompanyForm";
 import { CompanyTable } from "./CompanyTable";
 
 function normalize(value: string): string {
@@ -17,9 +20,12 @@ function normalize(value: string): string {
 export function CompaniesView() {
   const companies = useCRMStore((state) => state.companies);
   const setCompanies = useCRMStore((state) => state.setCompanies);
+  const removeCompany = useCRMStore((state) => state.removeCompany);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Company | undefined>(undefined);
 
   const loadCompanies = useCallback(async () => {
     setIsLoading(true);
@@ -55,6 +61,29 @@ export function CompaniesView() {
     );
   }, [companies, search]);
 
+  function handleEdit(company: Company) {
+    setEditingCompany(company);
+    setIsFormOpen(true);
+  }
+
+  async function handleDelete(company: Company) {
+    if (!window.confirm(`Delete company "${company.name}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteCompany(company.id);
+      removeCompany(company.id);
+    } catch {
+      // silently handle — user can retry
+    }
+  }
+
+  function handleFormClose() {
+    setIsFormOpen(false);
+    setEditingCompany(undefined);
+  }
+
   if (isLoading) {
     return <Loading title="Loading companies" />;
   }
@@ -65,16 +94,19 @@ export function CompaniesView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-          CRM
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
-          Companies
-        </h1>
-        <p className="mt-2 text-sm text-neutral-500">
-          Review customer accounts, domains, and subscription plans.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+            CRM
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
+            Companies
+          </h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            Review customer accounts, domains, and subscription plans.
+          </p>
+        </div>
+        <Button onClick={() => setIsFormOpen(true)}>New Company</Button>
       </div>
 
       <Card description="Search companies by account name, domain, or plan." title="Accounts">
@@ -98,10 +130,23 @@ export function CompaniesView() {
               title="No companies match your search"
             />
           ) : (
-            <CompanyTable companies={filteredCompanies} />
+            <CompanyTable
+              companies={filteredCompanies}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+            />
           )}
         </div>
       </Card>
+
+      {isFormOpen ? (
+        <CompanyForm
+          company={editingCompany}
+          key={editingCompany?.id ?? "new"}
+          onClose={handleFormClose}
+          open={isFormOpen}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
 import { useCRMStore } from "@/store/useCRMStore";
+import type { Contact } from "@/types";
 
-import { getContacts } from "./api";
+import { deleteContact, getContacts } from "./api";
+import { ContactForm } from "./ContactForm";
 import { ContactTable } from "./ContactTable";
 
 function normalize(value: string): string {
@@ -17,9 +20,12 @@ function normalize(value: string): string {
 export function ContactsView() {
   const contacts = useCRMStore((state) => state.contacts);
   const setContacts = useCRMStore((state) => state.setContacts);
+  const removeContact = useCRMStore((state) => state.removeContact);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | undefined>(undefined);
 
   const loadContacts = useCallback(async () => {
     setIsLoading(true);
@@ -50,12 +56,35 @@ export function ContactsView() {
       query.length === 0
         ? true
         : normalize(
-            [contact.name, contact.email, contact.phone, contact.company.name].join(
+            [contact.name, contact.email, contact.phone, contact.company?.name ?? ""].join(
               " ",
             ),
           ).includes(query),
     );
   }, [contacts, search]);
+
+  function handleEdit(contact: Contact) {
+    setEditingContact(contact);
+    setIsFormOpen(true);
+  }
+
+  async function handleDelete(contact: Contact) {
+    if (!window.confirm(`Delete contact "${contact.name}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteContact(contact.id);
+      removeContact(contact.id);
+    } catch {
+      // silently handle — user can retry
+    }
+  }
+
+  function handleFormClose() {
+    setIsFormOpen(false);
+    setEditingContact(undefined);
+  }
 
   if (isLoading) {
     return <Loading title="Loading contacts" />;
@@ -67,16 +96,19 @@ export function ContactsView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-          CRM
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
-          Contacts
-        </h1>
-        <p className="mt-2 text-sm text-neutral-500">
-          Browse customer stakeholders and account ownership context.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+            CRM
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
+            Contacts
+          </h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            Browse customer stakeholders and account ownership context.
+          </p>
+        </div>
+        <Button onClick={() => setIsFormOpen(true)}>New Contact</Button>
       </div>
 
       <Card description="Search contacts by name, email, phone, or company." title="Contacts">
@@ -100,10 +132,23 @@ export function ContactsView() {
               title="No contacts match your search"
             />
           ) : (
-            <ContactTable contacts={filteredContacts} />
+            <ContactTable
+              contacts={filteredContacts}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+            />
           )}
         </div>
       </Card>
+
+      {isFormOpen ? (
+        <ContactForm
+          contact={editingContact}
+          key={editingContact?.id ?? "new"}
+          onClose={handleFormClose}
+          open={isFormOpen}
+        />
+      ) : null}
     </div>
   );
 }

@@ -192,4 +192,29 @@ router.patch("/:id", (req, res) => {
   }
 });
 
+router.delete("/:id", (req, res) => {
+  const id = parseIdParam(req.params.id);
+
+  if (!id) {
+    return error(res, "Company id must be a positive integer.", 400);
+  }
+
+  try {
+    const deleted = companyService.delete(id);
+
+    if (!deleted) {
+      return error(res, "Company not found.", 404);
+    }
+
+    return success(res, { id });
+  } catch (caughtError) {
+    return error(
+      res,
+      "Failed to delete company.",
+      500,
+      caughtError instanceof Error ? caughtError.message : undefined,
+    );
+  }
+});
+
 export default router;

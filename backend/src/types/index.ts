@@ -26,7 +26,7 @@ export type Contact = {
   name: string;
   email: string;
   phone: string;
-  company_id: EntityId;
+  company_id: EntityId | null;
   created_at: Timestamp;
 };
 
@@ -36,8 +36,8 @@ export type Ticket = {
   description: string;
   status: TicketStatus;
   priority: TicketPriority;
-  contact_id: EntityId;
-  company_id: EntityId;
+  contact_id: EntityId | null;
+  company_id: EntityId | null;
   created_at: Timestamp;
   updated_at: Timestamp;
 };
@@ -46,12 +46,12 @@ export type CompanySummary = Pick<Company, "id" | "name">;
 export type ContactSummary = Pick<Contact, "id" | "name">;
 
 export type ContactWithCompany = Contact & {
-  company: CompanySummary;
+  company: CompanySummary | null;
 };
 
 export type RichTicket = Omit<Ticket, "contact_id" | "company_id"> & {
-  company: CompanySummary;
-  contact: ContactSummary;
+  company: CompanySummary | null;
+  contact: ContactSummary | null;
 };
 
 export type TicketFilters = {
@@ -65,14 +65,19 @@ export type UpdateCompanyInput = Partial<CreateCompanyInput>;
 
 export type CreateContactInput = Pick<
   Contact,
-  "name" | "email" | "phone" | "company_id"
->;
+  "name" | "email" | "phone"
+> & {
+  company_id?: EntityId | null;
+};
 export type UpdateContactInput = Partial<CreateContactInput>;
 
 export type CreateTicketInput = Pick<
   Ticket,
-  "title" | "description" | "status" | "priority" | "contact_id" | "company_id"
->;
+  "title" | "description" | "status" | "priority"
+> & {
+  contact_id?: EntityId | null;
+  company_id?: EntityId | null;
+};
 export type UpdateTicketInput = Partial<CreateTicketInput>;
 
 export type ApiSuccessResponse<T> = {

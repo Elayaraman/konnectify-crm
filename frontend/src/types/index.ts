@@ -36,9 +36,9 @@ export type Contact = {
   name: string;
   email: string;
   phone: string;
-  company_id: EntityId;
+  company_id: EntityId | null;
   created_at: Timestamp;
-  company: CompanySummary;
+  company: CompanySummary | null;
 };
 
 export type Ticket = {
@@ -49,8 +49,8 @@ export type Ticket = {
   priority: TicketPriority;
   created_at: Timestamp;
   updated_at: Timestamp;
-  company: CompanySummary;
-  contact: ContactSummary;
+  company: CompanySummary | null;
+  contact: ContactSummary | null;
 };
 
 export type ApiSuccessResponse<T> = {
