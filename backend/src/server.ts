@@ -1,6 +1,9 @@
+import "dotenv/config";
+
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 
+import copilotRoutes from "./routes/copilot.routes";
 import companyRoutes from "./routes/company.routes";
 import contactRoutes from "./routes/contact.routes";
 import ticketRoutes from "./routes/ticket.routes";
@@ -35,6 +38,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/companies", companyRoutes);
+app.use("/api/copilot", copilotRoutes);
 
 app.use((_req, res) => {
   return error(res, "Route not found.", 404);

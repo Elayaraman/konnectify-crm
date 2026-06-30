@@ -5,12 +5,14 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx src/server.ts",
+    "start": "node dist/server.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "db:init": "tsx src/db/database.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
+    "dotenv": "^17.4.2",
     "express": "^4.19.2"
   },
   "devDependencies": {
