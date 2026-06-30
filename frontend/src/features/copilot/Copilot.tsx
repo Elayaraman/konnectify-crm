@@ -64,6 +64,7 @@ function describeResult(result: CopilotResult): string {
       if (result.ticket_id) return `Deleted ticket #${result.ticket_id}`;
       if (result.company_id) return `Deleted company #${result.company_id}`;
       if (result.contact_id) return `Deleted contact #${result.contact_id}`;
+      return "Deleted item";
     }
 
     const verb = result.action === "created" ? "Created" : "Updated";
