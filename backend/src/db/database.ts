@@ -7,7 +7,7 @@ const dataDirectory = path.join(backendRoot, "data");
 const databasePath =
   process.env.DATABASE_PATH ?? path.join(dataDirectory, "konnectify.db");
 
-fs.mkdirSync(dataDirectory, { recursive: true });
+fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
 export const db = new Database(databasePath);
 
