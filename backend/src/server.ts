@@ -16,7 +16,8 @@ import { error, success } from "./utils/response";
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "127.0.0.1";
-const allowedOrigin = process.env.CORS_ORIGIN ?? "http://localhost:5173";
+const rawCorsOrigin = process.env.CORS_ORIGIN ?? "http://localhost:5173";
+const allowedOrigin = rawCorsOrigin.endsWith("/") ? rawCorsOrigin.slice(0, -1) : rawCorsOrigin;
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.header("Access-Control-Allow-Origin", allowedOrigin);
