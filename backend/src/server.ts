@@ -1,5 +1,9 @@
 import "dotenv/config";
 
+if (!process.env.NVIDIA_NIM_API_KEY) {
+  throw new Error("Missing NVIDIA_NIM_API_KEY environment variable. Please add it to your .env file.");
+}
+
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 

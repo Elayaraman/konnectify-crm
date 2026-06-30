@@ -58,6 +58,8 @@ export type TicketFilters = {
   status?: TicketStatus;
   priority?: TicketPriority;
   company_id?: EntityId;
+  contact_id?: EntityId | null;
+  unassigned_contact?: boolean;
 };
 
 export type CreateCompanyInput = Pick<Company, "name" | "domain" | "plan">;
