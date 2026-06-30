@@ -18,6 +18,8 @@ services:
           type: static_site
           name: konnectify-frontend
           envVar: RENDER_EXTERNAL_URL
+      - key: NVIDIA_NIM_API_KEY
+        sync: false
 
   - type: static_site
     name: konnectify-frontend
