@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: konnectify-backend
+    env: node
+    buildCommand: pnpm install && cd backend && pnpm run build
+    startCommand: cd backend && pnpm start
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_PATH
+        value: /data/konnectify.db
+      - key: CORS_ORIGIN
+        fromService:
+          type: static_site
+          name: konnectify-frontend
+          envVar: RENDER_EXTERNAL_URL
+
+  - type: static_site
+    name: konnectify-frontend
+    env: static
+    buildCommand: pnpm install && cd frontend && pnpm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: konnectify-backend
+          envVar: RENDER_EXTERNAL_URL
