@@ -4,7 +4,7 @@ import { apiClient } from "@/api/client";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useCRMStore } from "@/store/useCRMStore";
-import type { ApiSuccessResponse, Ticket } from "@/types";
+import type { ApiSuccessResponse, Ticket, Company, Contact } from "@/types";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -19,16 +19,22 @@ type CopilotResult =
   | {
       type: "action";
       action: "created" | "updated";
-      ticket: Ticket;
+      ticket?: Ticket;
+      company?: Company;
+      contact?: Contact;
     }
   | {
       type: "action";
       action: "deleted";
-      ticket_id: number;
+      ticket_id?: number;
+      company_id?: number;
+      contact_id?: number;
     }
   | {
       type: "list";
-      tickets: Ticket[];
+      tickets?: Ticket[];
+      companies?: Company[];
+      contacts?: Contact[];
       mode: "list" | "count";
     };
 
@@ -53,28 +59,45 @@ function describeResult(result: CopilotResult): string {
 
   if (result.type === "action") {
     if (result.action === "deleted") {
-      return `Deleted ticket #${result.ticket_id}`;
+      if (result.ticket_id) return `Deleted ticket #${result.ticket_id}`;
+      if (result.company_id) return `Deleted company #${result.company_id}`;
+      if (result.contact_id) return `Deleted contact #${result.contact_id}`;
     }
 
     const verb = result.action === "created" ? "Created" : "Updated";
-    return `${verb} ticket #${result.ticket.id}: ${result.ticket.title}`;
+    if (result.ticket) return `${verb} ticket #${result.ticket.id}: ${result.ticket.title}`;
+    if (result.company) return `${verb} company #${result.company.id}: ${result.company.name}`;
+    if (result.contact) return `${verb} contact #${result.contact.id}: ${result.contact.name}`;
   }
 
   if (result.type === "list") {
+    const listCount = (result.tickets?.length || 0) + (result.companies?.length || 0) + (result.contacts?.length || 0);
+    
     if (result.mode === "count") {
-      return `You have ${result.tickets.length} ticket(s) matching that criteria.`;
+      return `Found ${listCount} matching item(s).`;
     }
 
-    if (result.tickets.length === 0) {
-      return "No matching tickets found.";
+    if (listCount === 0) {
+      return "No matching items found.";
     }
 
-    return result.tickets
-      .map(
-        (ticket) =>
-          `#${ticket.id} ${ticket.title} - ${formatStatus(ticket.status)}`,
-      )
-      .join("\n");
+    if (result.tickets && result.tickets.length > 0) {
+      return result.tickets
+        .map((ticket) => `#${ticket.id} ${ticket.title} - ${formatStatus(ticket.status)}`)
+        .join("\n");
+    }
+    
+    if (result.companies && result.companies.length > 0) {
+      return result.companies
+        .map((company) => `#${company.id} ${company.name} (${company.domain})`)
+        .join("\n");
+    }
+    
+    if (result.contacts && result.contacts.length > 0) {
+      return result.contacts
+        .map((contact) => `#${contact.id} ${contact.name} - ${contact.email}`)
+        .join("\n");
+    }
   }
 
   return "Unknown result type.";
@@ -84,6 +107,12 @@ export function Copilot() {
   const addTicket = useCRMStore((state) => state.addTicket);
   const updateTicket = useCRMStore((state) => state.updateTicket);
   const removeTicket = useCRMStore((state) => state.removeTicket);
+  const addCompany = useCRMStore((state) => state.addCompany);
+  const updateCompany = useCRMStore((state) => state.updateCompany);
+  const removeCompany = useCRMStore((state) => state.removeCompany);
+  const addContact = useCRMStore((state) => state.addContact);
+  const updateContact = useCRMStore((state) => state.updateContact);
+  const removeContact = useCRMStore((state) => state.removeContact);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -116,11 +145,17 @@ export function Copilot() {
 
       if (result.type === "action") {
         if (result.action === "created") {
-          addTicket(result.ticket);
+          if (result.ticket) addTicket(result.ticket);
+          if (result.company) addCompany(result.company);
+          if (result.contact) addContact(result.contact);
         } else if (result.action === "updated") {
-          updateTicket(result.ticket);
+          if (result.ticket) updateTicket(result.ticket);
+          if (result.company) updateCompany(result.company);
+          if (result.contact) updateContact(result.contact);
         } else if (result.action === "deleted") {
-          removeTicket(result.ticket_id);
+          if (result.ticket_id) removeTicket(result.ticket_id);
+          if (result.company_id) removeCompany(result.company_id);
+          if (result.contact_id) removeContact(result.contact_id);
         }
       }
 

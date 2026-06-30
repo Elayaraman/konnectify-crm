@@ -65,6 +65,14 @@ router.post("/", async (req, res) => {
 
     return success(res, result);
   } catch (caughtError) {
+    if (caughtError instanceof Error && caughtError.message === "QUOTA_EXCEEDED") {
+      return error(
+        res,
+        "The AI service is temporarily rate-limited, please wait a moment and try again",
+        429,
+      );
+    }
+
     return error(
       res,
       "Copilot failed to process the request.",
