@@ -4,10 +4,16 @@ import path from "node:path";
 
 const backendRoot = path.resolve(__dirname, "../..");
 const dataDirectory = path.join(backendRoot, "data");
-const databasePath =
+let databasePath =
   process.env.DATABASE_PATH ?? path.join(dataDirectory, "konnectify.db");
 
-fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+try {
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+} catch (error) {
+  console.warn(`Warning: Could not create directory for database at ${databasePath}. Falling back to local ephemeral storage.`);
+  databasePath = path.join(dataDirectory, "konnectify.db");
+  fs.mkdirSync(dataDirectory, { recursive: true });
+}
 
 export const db = new Database(databasePath);
 
