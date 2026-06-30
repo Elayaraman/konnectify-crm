@@ -48,4 +48,9 @@ export const companyService = {
 
     return getCompanyById(id);
   },
+
+  delete(id: EntityId): boolean {
+    const result = db.prepare("DELETE FROM companies WHERE id = ?").run(id);
+    return result.changes > 0;
+  },
 };

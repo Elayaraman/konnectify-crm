@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-table";
 
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Table } from "@/components/ui/Table";
 import type { TicketPriority, TicketStatus } from "@/types";
 
@@ -14,6 +15,8 @@ import type { Ticket } from "./types";
 
 type TicketTableProps = {
   tickets: Ticket[];
+  onEdit: (ticket: Ticket) => void;
+  onDelete: (ticket: Ticket) => void;
 };
 
 const columnHelper = createColumnHelper<Ticket>();
@@ -52,7 +55,7 @@ function getPriorityTone(priority: TicketPriority) {
   return tones[priority];
 }
 
-export function TicketTable({ tickets }: TicketTableProps) {
+export function TicketTable({ tickets, onEdit, onDelete }: TicketTableProps) {
   const columns = useMemo(
     () => [
       columnHelper.accessor("title", {
@@ -82,20 +85,44 @@ export function TicketTable({ tickets }: TicketTableProps) {
           </Badge>
         ),
       }),
-      columnHelper.accessor((row) => row.company.name, {
+      columnHelper.accessor((row) => row.company?.name, {
         id: "company",
         header: "Company",
+        cell: (info) => info.getValue() ?? <Badge tone="neutral">Unassigned</Badge>,
       }),
-      columnHelper.accessor((row) => row.contact.name, {
+      columnHelper.accessor((row) => row.contact?.name, {
         id: "contact",
         header: "Contact",
+        cell: (info) => info.getValue() ?? <Badge tone="neutral">Unassigned</Badge>,
       }),
       columnHelper.accessor("created_at", {
         header: "Created",
         cell: (info) => dateFormatter.format(new Date(info.getValue())),
       }),
+      columnHelper.display({
+        id: "actions",
+        header: "",
+        cell: (info) => (
+          <div className="flex gap-1">
+            <Button
+              onClick={() => onEdit(info.row.original)}
+              size="sm"
+              variant="ghost"
+            >
+              Edit
+            </Button>
+            <Button
+              onClick={() => onDelete(info.row.original)}
+              size="sm"
+              variant="ghost"
+            >
+              Delete
+            </Button>
+          </div>
+        ),
+      }),
     ],
-    [],
+    [onEdit, onDelete],
   );
 
   const table = useReactTable({

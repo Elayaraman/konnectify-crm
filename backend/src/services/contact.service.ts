@@ -26,7 +26,7 @@ const contactSelect = `
     contacts.created_at,
     companies.name AS company_name
   FROM contacts
-  INNER JOIN companies ON companies.id = contacts.company_id
+  LEFT JOIN companies ON companies.id = contacts.company_id
 `;
 
 function toContact(row: ContactRow): ContactWithCompany {
@@ -37,10 +37,12 @@ function toContact(row: ContactRow): ContactWithCompany {
     phone: row.phone,
     company_id: row.company_id,
     created_at: row.created_at,
-    company: {
-      id: row.company_id,
-      name: row.company_name,
-    },
+    company: row.company_id
+      ? {
+          id: row.company_id,
+          name: row.company_name,
+        }
+      : null,
   };
 }
 
@@ -73,7 +75,10 @@ export const contactService = {
           VALUES (@name, @email, @phone, @company_id)
         `,
       )
-      .run(data);
+      .run({
+        ...data,
+        company_id: data.company_id ?? null,
+      });
 
     return getContactById(Number(result.lastInsertRowid)) as ContactWithCompany;
   },
@@ -97,5 +102,10 @@ export const contactService = {
     }
 
     return getContactById(id);
+  },
+
+  delete(id: EntityId): boolean {
+    const result = db.prepare("DELETE FROM contacts WHERE id = ?").run(id);
+    return result.changes > 0;
   },
 };

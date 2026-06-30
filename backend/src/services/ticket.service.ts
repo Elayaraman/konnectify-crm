@@ -37,8 +37,8 @@ const ticketSelect = `
     contacts.id AS contact_id,
     contacts.name AS contact_name
   FROM tickets
-  INNER JOIN companies ON companies.id = tickets.company_id
-  INNER JOIN contacts ON contacts.id = tickets.contact_id
+  LEFT JOIN companies ON companies.id = tickets.company_id
+  LEFT JOIN contacts ON contacts.id = tickets.contact_id
 `;
 
 function toRichTicket(row: TicketRow): RichTicket {
@@ -50,14 +50,18 @@ function toRichTicket(row: TicketRow): RichTicket {
     priority: row.priority,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    company: {
-      id: row.company_id,
-      name: row.company_name,
-    },
-    contact: {
-      id: row.contact_id,
-      name: row.contact_name,
-    },
+    company: row.company_id
+      ? {
+          id: row.company_id,
+          name: row.company_name,
+        }
+      : null,
+    contact: row.contact_id
+      ? {
+          id: row.contact_id,
+          name: row.contact_name,
+        }
+      : null,
   };
 }
 
@@ -131,7 +135,11 @@ export const ticketService = {
           )
         `,
       )
-      .run(data);
+      .run({
+        ...data,
+        contact_id: data.contact_id ?? null,
+        company_id: data.company_id ?? null,
+      });
 
     return getTicketById(Number(result.lastInsertRowid)) as RichTicket;
   },
@@ -163,5 +171,10 @@ export const ticketService = {
     }
 
     return getTicketById(id);
+  },
+
+  delete(id: EntityId): boolean {
+    const result = db.prepare("DELETE FROM tickets WHERE id = ?").run(id);
+    return result.changes > 0;
   },
 };

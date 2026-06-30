@@ -22,8 +22,14 @@ type CopilotResult =
       ticket: Ticket;
     }
   | {
+      type: "action";
+      action: "deleted";
+      ticket_id: number;
+    }
+  | {
       type: "list";
       tickets: Ticket[];
+      mode: "list" | "count";
     };
 
 const initialMessages: ChatMessage[] = [
@@ -46,25 +52,38 @@ function describeResult(result: CopilotResult): string {
   }
 
   if (result.type === "action") {
+    if (result.action === "deleted") {
+      return `Deleted ticket #${result.ticket_id}`;
+    }
+
     const verb = result.action === "created" ? "Created" : "Updated";
     return `${verb} ticket #${result.ticket.id}: ${result.ticket.title}`;
   }
 
-  if (result.tickets.length === 0) {
-    return "No matching tickets found.";
+  if (result.type === "list") {
+    if (result.mode === "count") {
+      return `You have ${result.tickets.length} ticket(s) matching that criteria.`;
+    }
+
+    if (result.tickets.length === 0) {
+      return "No matching tickets found.";
+    }
+
+    return result.tickets
+      .map(
+        (ticket) =>
+          `#${ticket.id} ${ticket.title} - ${formatStatus(ticket.status)}`,
+      )
+      .join("\n");
   }
 
-  return result.tickets
-    .map(
-      (ticket) =>
-        `#${ticket.id} ${ticket.title} - ${formatStatus(ticket.status)}`,
-    )
-    .join("\n");
+  return "Unknown result type.";
 }
 
 export function Copilot() {
   const addTicket = useCRMStore((state) => state.addTicket);
   const updateTicket = useCRMStore((state) => state.updateTicket);
+  const removeTicket = useCRMStore((state) => state.removeTicket);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -88,15 +107,20 @@ export function Copilot() {
     try {
       const response = await apiClient.post<ApiSuccessResponse<CopilotResult>>(
         "/copilot",
-        { message },
+        {
+          message,
+          history: messages.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+        },
       );
       const result = response.data.data;
 
       if (result.type === "action") {
         if (result.action === "created") {
           addTicket(result.ticket);
-        } else {
+        } else if (result.action === "updated") {
           updateTicket(result.ticket);
+        } else if (result.action === "deleted") {
+          removeTicket(result.ticket_id);
         }
       }
 

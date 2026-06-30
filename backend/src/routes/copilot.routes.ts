@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { executeIntent, parseIntent } from "../services/copilot.service";
+import type { ChatTurn } from "../services/copilot.service";
 import { error, success } from "../utils/response";
 
 type BodyRecord = Record<string, unknown>;
@@ -30,6 +31,25 @@ function parseMessage(body: unknown): ParseResult<string> {
   return { ok: true, value: message.trim() };
 }
 
+function parseHistory(body: unknown): ChatTurn[] {
+  const record = asBodyRecord(body);
+
+  if (!record || !Array.isArray(record.history)) {
+    return [];
+  }
+
+  return record.history.filter(
+    (entry: unknown): entry is ChatTurn =>
+      typeof entry === "object" &&
+      entry !== null &&
+      "role" in entry &&
+      "text" in entry &&
+      (entry.role === "user" || entry.role === "assistant") &&
+      typeof entry.text === "string" &&
+      entry.text.trim().length > 0,
+  );
+}
+
 router.post("/", async (req, res) => {
   const parsed = parseMessage(req.body);
 
@@ -37,8 +57,10 @@ router.post("/", async (req, res) => {
     return error(res, parsed.message, 400);
   }
 
+  const history = parseHistory(req.body);
+
   try {
-    const intent = await parseIntent(parsed.value);
+    const intent = await parseIntent(parsed.value, history);
     const result = await executeIntent(intent);
 
     return success(res, result);
