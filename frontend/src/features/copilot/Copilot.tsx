@@ -9,6 +9,7 @@ import type { ApiSuccessResponse, Ticket, Company, Contact } from "@/types";
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
+  rawText?: string; // Preserves hidden metadata (e.g. PENDING_INTENT) for backend history
 };
 
 type CopilotResult =
@@ -54,7 +55,8 @@ function formatStatus(value: string): string {
 
 function describeResult(result: CopilotResult): string {
   if (result.type === "clarify") {
-    return result.question;
+    // Strip hidden PENDING_INTENT metadata (used for offer-to-create fallback) from the display text
+    return result.question.replace(/\s*<!--PENDING_INTENT:.*?-->/s, "").trim();
   }
 
   if (result.type === "action") {
@@ -138,7 +140,7 @@ export function Copilot() {
         "/copilot",
         {
           message,
-          history: messages.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+          history: messages.slice(-6).map((m) => ({ role: m.role, text: m.rawText ?? m.text })),
         },
       );
       const result = response.data.data;
@@ -159,9 +161,10 @@ export function Copilot() {
         }
       }
 
+      const rawQuestion = result.type === "clarify" ? result.question : undefined;
       setMessages((currentMessages) => [
         ...currentMessages,
-        { role: "assistant", text: describeResult(result) },
+        { role: "assistant", text: describeResult(result), rawText: rawQuestion },
       ]);
     } catch (caughtError) {
       setMessages((currentMessages) => [

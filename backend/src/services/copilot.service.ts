@@ -37,6 +37,7 @@ type UpdateTicketIntent = {
 type ListTicketsIntent = {
   action: "list_tickets";
   company_name?: string;
+  contact_name?: string;
   status?: TicketStatus;
   mode?: "list" | "count";
 };
@@ -68,7 +69,8 @@ type UpdateCompanyIntent = {
 
 type DeleteCompanyIntent = {
   action: "delete_company";
-  company_id: number;
+  company_id?: number;
+  company_name?: string;
 };
 
 type ListCompaniesIntent = {
@@ -96,7 +98,8 @@ type UpdateContactIntent = {
 
 type DeleteContactIntent = {
   action: "delete_contact";
-  contact_id: number;
+  contact_id?: number;
+  contact_name?: string;
 };
 
 type ListContactsIntent = {
@@ -109,6 +112,12 @@ type ListContactsIntent = {
 type UnknownIntent = {
   action: "unknown";
   raw_action: string;
+};
+
+type CreateCompanyAndContinueIntent = {
+  action: "create_company_and_continue";
+  company_name: string;
+  pending_intent: Intent;
 };
 
 export type Intent =
@@ -125,6 +134,7 @@ export type Intent =
   | ListContactsIntent
   | DeleteContactIntent
   | ClarifyIntent
+  | CreateCompanyAndContinueIntent
   | UnknownIntent;
 
 type ActionResult = {
@@ -165,16 +175,16 @@ You are the intent parser for Konnectify CRM. Return ONLY valid JSON. Do not inc
 
 Valid shapes:
 {"action":"create_ticket","title":"string","description":"string","priority":"low|medium|high|urgent","company_name":"optional string","contact_name":"optional string"}
-{"action":"update_ticket","ticket_id":123,"title":"optional string","description":"optional string","status":"open|in_progress|resolved|closed","priority":"low|medium|high|urgent","company_name":"optional string","contact_name":"optional string"}
+{"action":"update_ticket","ticket_id":123,"title":"optional string","description":"optional string","status":"open|in_progress|resolved|closed","priority":"low|medium|high|urgent","company_name":"optional string (use 'unassigned' to remove)","contact_name":"optional string (use 'unassigned' to remove)"}
 {"action":"delete_ticket","ticket_id":123}
-{"action":"list_tickets","company_name":"optional string","status":"open|in_progress|resolved|closed","mode":"list|count"}
+{"action":"list_tickets","company_name":"optional string","contact_name":"optional string (e.g. 'unassigned' to find tickets with no contact)","status":"open|in_progress|resolved|closed","mode":"list|count"}
 {"action":"create_company","name":"string","domain":"optional string","plan":"optional string"}
 {"action":"update_company","company_id":123,"name":"optional string","domain":"optional string","plan":"optional string"}
-{"action":"delete_company","company_id":123}
+{"action":"delete_company","company_id":123,"company_name":"optional string"}
 {"action":"list_companies","name":"optional string","mode":"list|count"}
 {"action":"create_contact","name":"string","email":"optional string","phone":"optional string","company_name":"optional string"}
 {"action":"update_contact","contact_id":123,"name":"optional string","email":"optional string","phone":"optional string","company_name":"optional string"}
-{"action":"delete_contact","contact_id":123}
+{"action":"delete_contact","contact_id":123,"contact_name":"optional string"}
 {"action":"list_contacts","name":"optional string","company_name":"optional string","mode":"list|count"}
 {"action":"clarify","question":"string"}
 
@@ -184,8 +194,8 @@ Rules:
 - For create_ticket: be aggressive about defaults. If the user describes a problem but gives no explicit title, derive a short title from their description. If no detailed description is given beyond a one-line complaint, use that line as the description. If no priority is given, omit the priority field entirely — the system will default it. Both company_name and contact_name are optional; only ask for them if the user seems to want a specific company/contact assigned but hasn't said which. Do not ask for title, description, or priority since those can be inferred or defaulted.
   - Example: User says "Make a new ticket, the laptop screen has a deep scratch" -> output {"action":"create_ticket","title":"Deep scratch on laptop screen","description":"the laptop screen has a deep scratch"}. Zero clarifying questions, act immediately.
 - For update_ticket: require a numeric ticket_id. Map casual phrasing to the closest valid status — "done", "fixed", "completed" → "resolved"; "close", "closed it out", "shut it down" → "closed"; "working on it", "in progress", "started" → "in_progress"; "reopen", "reopen it", "open it again" → "open". Do not ask for clarification if casual phrasing clearly maps to a status. You can also update title, description, company_name, and contact_name.
-- For create_company: automatically generate dummy values for domain and plan if they are missing (e.g., domain: "example.com", plan: "Basic"). Do NOT ask for clarification.
-- For create_contact: automatically generate dummy values for email and phone if they are missing (e.g., email: "placeholder@example.com", phone: "+1 000 000 0000"). Do NOT ask for clarification.
+- For create_company: domain and plan are optional. If the user does not mention them, OMIT them from the JSON entirely — the backend will auto-generate unique values. Do NOT ask for clarification.
+- For create_contact: email and phone are optional. If the user does not mention them, OMIT them from the JSON entirely — the backend will auto-generate unique values. Do NOT ask for clarification.
 - For list_* actions: no special defaults needed; an empty filter returns everything. Add \`mode: "count"\` for phrases asking for totals (e.g. 'how many tickets', 'count', 'total number of', 'how much tickets we have'). For general listing (e.g. 'show me', 'list', 'what are', 'which tickets'), use \`mode: "list"\` or omit the mode.
 - Only return action "clarify" when genuinely required information is missing and cannot be inferred from context or conversation history.
 - Multi-turn context: If your previous turn was a clarifying question, you MUST interpret the user's short reply as the direct answer to that specific question (this applies to ANY single field being resolved via clarify — priority, status, ticket_id, company, or contact). Carry forward any fields established earlier in the conversation and emit the original intent using the new value, rather than starting a fresh classification and returning clarify again. A single-word reply to a clarifying question is never grounds to ask which action was originally intended — the action is already established by the conversation history.
@@ -194,7 +204,7 @@ Rules:
 `.trim();
 
 const openai = new OpenAI({
-  apiKey: "REDACTED",
+  apiKey: process.env.NVIDIA_NIM_API_KEY,
   baseURL: "https://integrate.api.nvidia.com/v1",
 });
 
@@ -267,15 +277,14 @@ function validateIntent(value: unknown): Intent {
     const title = readString(value, "title");
     const description = readString(value, "description");
     const companyName = readString(value, "company_name");
-    const priorityValue = value.priority;
     const priority = readPriority(value, "priority");
     const contactName = readString(value, "contact_name");
 
     if (!title || !description) {
-      throw new Error("create_ticket requires title and description.");
+      return { action: "clarify", question: "Please provide both a title and a description for the ticket." };
     }
 
-    if (priorityValue !== undefined && !priority) {
+    if (value.priority !== undefined && !priority) {
       throw new Error("create_ticket priority is invalid.");
     }
 
@@ -301,7 +310,7 @@ function validateIntent(value: unknown): Intent {
     const priority = readPriority(value, "priority");
 
     if (!ticketId) {
-      throw new Error("update_ticket requires a positive numeric ticket_id.");
+      return { action: "clarify", question: "Which ticket ID would you like to update?" };
     }
 
     if (statusValue !== undefined && !status) {
@@ -333,7 +342,7 @@ function validateIntent(value: unknown): Intent {
 
   if (action === "create_company") {
     const name = readString(value, "name");
-    if (!name) throw new Error("create_company requires a name.");
+    if (!name) return { action: "clarify", question: "What is the name of the company?" };
     return {
       action,
       name,
@@ -344,7 +353,7 @@ function validateIntent(value: unknown): Intent {
 
   if (action === "update_company") {
     const companyId = readNumber(value, "company_id");
-    if (!companyId) throw new Error("update_company requires a positive numeric company_id.");
+    if (!companyId) return { action: "clarify", question: "Which company ID would you like to update?" };
     return {
       action,
       company_id: companyId,
@@ -356,8 +365,9 @@ function validateIntent(value: unknown): Intent {
 
   if (action === "delete_company") {
     const companyId = readNumber(value, "company_id");
-    if (!companyId) throw new Error("delete_company requires a positive numeric company_id.");
-    return { action, company_id: companyId };
+    const companyName = readString(value, "company_name");
+    if (!companyId && !companyName) return { action: "clarify", question: "Which company would you like to delete?" };
+    return { action, ...(companyId ? { company_id: companyId } : {}), ...(companyName ? { company_name: companyName } : {}) };
   }
 
   if (action === "list_companies") {
@@ -370,11 +380,11 @@ function validateIntent(value: unknown): Intent {
 
   if (action === "create_contact") {
     const name = readString(value, "name");
-    if (!name) throw new Error("create_contact requires a name.");
+    if (!name) return { action: "clarify", question: "What is the name of the contact?" };
     return {
       action,
       name,
-      email: readString(value, "email") ?? "placeholder@example.com",
+      email: readString(value, "email") ?? uniqueDummyEmail(name),
       phone: readString(value, "phone") ?? "+1 000 000 0000",
       ...(readString(value, "company_name") ? { company_name: readString(value, "company_name") } : {}),
     };
@@ -382,7 +392,7 @@ function validateIntent(value: unknown): Intent {
 
   if (action === "update_contact") {
     const contactId = readNumber(value, "contact_id");
-    if (!contactId) throw new Error("update_contact requires a positive numeric contact_id.");
+    if (!contactId) return { action: "clarify", question: "Which contact ID would you like to update?" };
     return {
       action,
       contact_id: contactId,
@@ -395,8 +405,9 @@ function validateIntent(value: unknown): Intent {
 
   if (action === "delete_contact") {
     const contactId = readNumber(value, "contact_id");
-    if (!contactId) throw new Error("delete_contact requires a positive numeric contact_id.");
-    return { action, contact_id: contactId };
+    const contactName = readString(value, "contact_name");
+    if (!contactId && !contactName) return { action: "clarify", question: "Which contact would you like to delete?" };
+    return { action, ...(contactId ? { contact_id: contactId } : {}), ...(contactName ? { contact_name: contactName } : {}) };
   }
 
   if (action === "list_contacts") {
@@ -431,7 +442,7 @@ function validateIntent(value: unknown): Intent {
     const ticketId = readNumber(value, "ticket_id");
 
     if (!ticketId) {
-      throw new Error("delete_ticket requires a positive numeric ticket_id.");
+      return { action: "clarify", question: "Which ticket ID would you like to delete?" };
     }
 
     return { action, ticket_id: ticketId };
@@ -448,6 +459,17 @@ function validateIntent(value: unknown): Intent {
   }
 
   return { action: "unknown", raw_action: action };
+}
+
+// Generate unique dummy values to avoid UNIQUE constraint collisions on email/domain.
+function uniqueDummyEmail(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]/g, ".");
+  return `${slug}.${Date.now()}@example.com`;
+}
+
+function uniqueDummyDomain(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  return `${slug}.example.com`;
 }
 
 function findCompanyByName(companyName: string): Company | undefined {
@@ -486,28 +508,19 @@ async function requestModelIntent(
       ...historyContents,
       { role: "user", content: message }
     ],
-    temperature: 1,
+    temperature: 0.2,
     top_p: 0.95,
     max_tokens: 16384,
-    reasoning_budget: 16384,
-    chat_template_kwargs: {"enable_thinking":true},
     stream: true
   } as any)) as unknown as AsyncIterable<any>;
 
   let content = "";
   for await (const chunk of completion) {
-    const reasoning = chunk.choices[0]?.delta?.reasoning_content;
-    if (reasoning) {
-      process.stdout.write(reasoning);
-    }
-
     const deltaContent = chunk.choices[0]?.delta?.content;
     if (deltaContent) {
-      process.stdout.write(deltaContent);
       content += deltaContent;
     }
   }
-  process.stdout.write("\n");
 
   if (!content) {
     throw new Error("Model returned an empty response.");
@@ -519,25 +532,63 @@ async function requestModelIntent(
 // Two prior prompt-only fix attempts did not reliably prevent Gemini from returning a clarify
 // action asking for company or priority when the user wants to create a ticket.
 // This guard detects that specific failure pattern so we can override it.
-function isSpuriousCreateClarify(question: string): boolean {
-  const lower = question.toLowerCase();
+function isSpuriousCreateClarify(question: string, userMessage: string): boolean {
+  const lowerQuestion = question.toLowerCase();
+  const lowerMsg = userMessage.toLowerCase();
+  
+  if (lowerMsg.includes("how many") || lowerMsg.includes("list") || lowerMsg.includes("count") || lowerMsg.includes("update") || lowerMsg.includes("delete") || lowerMsg.includes("assign")) {
+    return false; // Not a creation request, don't override
+  }
+
+  // If the user explicitly asks to create a company/contact and doesn't mention tickets/issues, it's a legitimate create_company intent missing a name.
+  const hasTicketKeyword = lowerMsg.includes("ticket") || lowerMsg.includes("issue") || lowerMsg.includes("problem") || lowerMsg.includes("bug") || lowerMsg.includes("scratch");
+  const hasCompanyOrContactCreateKeyword = (lowerMsg.includes("company") || lowerMsg.includes("contact")) && (lowerMsg.includes("create") || lowerMsg.includes("new") || lowerMsg.includes("add"));
+  if (hasCompanyOrContactCreateKeyword && !hasTicketKeyword) {
+    return false;
+  }
+
   // Legitimate clarifies include "Which company did you mean?" or "Which contact did you mean?"
   // Spurious ones generally ask "provide the company name" or "what is the priority" outright.
   // We intercept if it mentions company or priority and it's not a standard resolution question.
-  return lower.includes("company") || lower.includes("priority");
+  return lowerQuestion.includes("company") || lowerQuestion.includes("priority");
 }
 
 export async function parseIntent(
   message: string,
   history: ChatTurn[] = [],
 ): Promise<Intent> {
-  let text = await requestModelIntent(message, history);
+  // Option B (code-driven) interceptor for offer-to-create fallback:
+  // If the last assistant message was offering to create a company, and the user replies affirmatively,
+  // we emit a synthetic 'create_company_and_continue' intent instead of asking the LLM to reconstruct it.
+  if (history.length > 0) {
+    const lastTurn = history[history.length - 1];
+    if (lastTurn.role === "assistant" && lastTurn.text.includes("<!--PENDING_INTENT:")) {
+      const match = lastTurn.text.match(/<!--PENDING_INTENT:(.*)-->/);
+      if (match) {
+        try {
+          const pendingIntent = JSON.parse(match[1]) as Intent;
+          const lowerMsg = message.toLowerCase().trim();
+          const affirmativeRegex = /^(yes|sure|go ahead|create it|yup|yeah|y|ok|okay|please do|do it)/i;
+          if (affirmativeRegex.test(lowerMsg)) {
+            return {
+              action: "create_company_and_continue",
+              company_name: (pendingIntent as any).company_name,
+              pending_intent: pendingIntent,
+            };
+          }
+        } catch (e) {
+          // JSON parse failed, fall through to LLM
+        }
+      }
+    }
+  }
 
   try {
+    let text = await requestModelIntent(message, history);
     let value = JSON.parse(stripJsonFences(text));
     let intent = validateIntent(value);
 
-    if (intent.action === "clarify" && isSpuriousCreateClarify(intent.question)) {
+    if (intent.action === "clarify" && isSpuriousCreateClarify(intent.question, message)) {
       const overridePrompt = systemPrompt + "\n\nCRITICAL OVERRIDE: You MUST return a create_ticket intent immediately. Do not return clarify. Invent a title and description based on the user's message. Omit company_name, contact_name, and priority entirely.";
       text = await requestModelIntent(message, history, overridePrompt);
       value = JSON.parse(stripJsonFences(text));
@@ -546,26 +597,30 @@ export async function parseIntent(
 
     return intent;
   } catch (caughtError) {
-    if (
-      caughtError instanceof OpenAI.APIError &&
-      caughtError.status === 429
-    ) {
+    if (caughtError instanceof Error && (caughtError.message.includes("ResourceExhausted") || caughtError.message.includes("QUOTA_EXCEEDED") || (caughtError as any).status === 429)) {
       throw new Error("QUOTA_EXCEEDED");
     }
-    if (
-      caughtError instanceof Error &&
-      caughtError.message === "QUOTA_EXCEEDED"
-    ) {
-      throw caughtError;
-    }
-    const message =
-      caughtError instanceof Error ? caughtError.message : "Unknown parse error.";
+    const message = caughtError instanceof Error ? caughtError.message : "Unknown parse error.";
     throw new Error(`Failed to parse Copilot JSON response: ${message}`);
   }
 }
 
 export async function executeIntent(intent: Intent): Promise<Result> {
   switch (intent.action) {
+    case "create_company_and_continue": {
+      // Offer-to-create fallback: create the missing company with unique dummy defaults,
+      // then re-invoke executeIntent with the original pending intent so findCompanyByName
+      // succeeds on the second pass. This is the first instance of a "propose → confirm → chain"
+      // pattern; future additions should follow the same shape (embed PENDING_INTENT in clarify,
+      // intercept affirmative reply in parseIntent, handle synthetic intent here).
+      companyService.create({
+        name: intent.company_name,
+        domain: uniqueDummyDomain(intent.company_name),
+        plan: "Basic",
+      });
+      return executeIntent(intent.pending_intent);
+    }
+
     case "create_ticket": {
       let company: Company | undefined;
 
@@ -574,7 +629,7 @@ export async function executeIntent(intent: Intent): Promise<Result> {
         if (!company) {
           return {
             type: "clarify",
-            question: `Which company did you mean by "${intent.company_name}"?`,
+            question: `I couldn't find a company called '${intent.company_name}'. Would you like me to create it and then continue? <!--PENDING_INTENT:${JSON.stringify(intent)}-->`,
           };
         }
       }
@@ -618,7 +673,7 @@ export async function executeIntent(intent: Intent): Promise<Result> {
         } else {
           const company = findCompanyByName(intent.company_name);
           if (!company) {
-            return { type: "clarify", question: `Which company did you mean by "${intent.company_name}"?` };
+            return { type: "clarify", question: `I couldn't find a company called '${intent.company_name}'. Would you like me to create it and then continue? <!--PENDING_INTENT:${JSON.stringify(intent)}-->` };
           }
           companyId = company.id;
         }
@@ -669,13 +724,32 @@ export async function executeIntent(intent: Intent): Promise<Result> {
       if (intent.company_name && !company) {
         return {
           type: "clarify",
-          question: `Which company did you mean by "${intent.company_name}"?`,
+          question: `I couldn't find a company called '${intent.company_name}'. Would you like me to create it and then continue? <!--PENDING_INTENT:${JSON.stringify(intent)}-->`,
         };
+      }
+      
+      let contactId: number | undefined | null = undefined;
+      let unassignedContact = false;
+      if (intent.contact_name) {
+        if (intent.contact_name.toLowerCase() === "unassigned" || intent.contact_name.toLowerCase() === "none" || intent.contact_name.toLowerCase() === "null") {
+          unassignedContact = true;
+        } else {
+          const availableContacts = company 
+            ? contactService.getAll().filter(c => c.company_id === company.id)
+            : contactService.getAll();
+          
+          const contact = findContactByName(availableContacts, intent.contact_name);
+          if (!contact) {
+            return { type: "clarify", question: `Which contact did you mean by "${intent.contact_name}"?` };
+          }
+          contactId = contact.id;
+        }
       }
 
       const tickets = ticketService.getAll({
         ...(intent.status ? { status: intent.status } : {}),
         ...(company ? { company_id: company.id } : {}),
+        ...(unassignedContact ? { unassigned_contact: true } : (contactId !== undefined ? { contact_id: contactId } : {})),
       });
 
       return { type: "list", tickets, mode: intent.mode ?? "list" };
@@ -697,7 +771,7 @@ export async function executeIntent(intent: Intent): Promise<Result> {
     case "create_company": {
       const company = companyService.create({
         name: intent.name,
-        domain: intent.domain ?? "example.com",
+        domain: intent.domain ?? uniqueDummyDomain(intent.name),
         plan: intent.plan ?? "Basic",
       });
       return { type: "action", action: "created", company };
@@ -716,11 +790,22 @@ export async function executeIntent(intent: Intent): Promise<Result> {
     }
 
     case "delete_company": {
-      const deleted = companyService.delete(intent.company_id);
-      if (!deleted) {
-        return { type: "clarify", question: `Company ID ${intent.company_id} not found.` };
+      let companyId = intent.company_id;
+      if (!companyId && intent.company_name) {
+        const company = findCompanyByName(intent.company_name);
+        if (!company) {
+          return { type: "clarify", question: `I couldn't find a company called '${intent.company_name}'.` };
+        }
+        companyId = company.id;
       }
-      return { type: "action", action: "deleted", company_id: intent.company_id };
+      if (!companyId) {
+        return { type: "clarify", question: "Which company should I delete? Please provide a name or ID." };
+      }
+      const deleted = companyService.delete(companyId);
+      if (!deleted) {
+        return { type: "clarify", question: `Company ID ${companyId} not found.` };
+      }
+      return { type: "action", action: "deleted", company_id: companyId };
     }
 
     case "list_companies": {
@@ -737,13 +822,13 @@ export async function executeIntent(intent: Intent): Promise<Result> {
       if (intent.company_name) {
         const company = findCompanyByName(intent.company_name);
         if (!company) {
-          return { type: "clarify", question: `Which company did you mean by "${intent.company_name}"?` };
+          return { type: "clarify", question: `I couldn't find a company called '${intent.company_name}'. Would you like me to create it and then continue? <!--PENDING_INTENT:${JSON.stringify(intent)}-->` };
         }
         companyId = company.id;
       }
       const contact = contactService.create({
         name: intent.name,
-        email: intent.email ?? "placeholder@example.com",
+        email: intent.email ?? uniqueDummyEmail(intent.name),
         phone: intent.phone ?? "+1 000 000 0000",
         company_id: companyId,
       });
@@ -758,7 +843,7 @@ export async function executeIntent(intent: Intent): Promise<Result> {
         } else {
           const company = findCompanyByName(intent.company_name);
           if (!company) {
-            return { type: "clarify", question: `Which company did you mean by "${intent.company_name}"?` };
+            return { type: "clarify", question: `I couldn't find a company called '${intent.company_name}'. Would you like me to create it and then continue? <!--PENDING_INTENT:${JSON.stringify(intent)}-->` };
           }
           companyId = company.id;
         }
@@ -778,11 +863,22 @@ export async function executeIntent(intent: Intent): Promise<Result> {
     }
 
     case "delete_contact": {
-      const deleted = contactService.delete(intent.contact_id);
-      if (!deleted) {
-        return { type: "clarify", question: `Contact ID ${intent.contact_id} not found.` };
+      let contactId = intent.contact_id;
+      if (!contactId && intent.contact_name) {
+        const contact = findContactByName(contactService.getAll(), intent.contact_name);
+        if (!contact) {
+          return { type: "clarify", question: `I couldn't find a contact called '${intent.contact_name}'.` };
+        }
+        contactId = contact.id;
       }
-      return { type: "action", action: "deleted", contact_id: intent.contact_id };
+      if (!contactId) {
+        return { type: "clarify", question: "Which contact should I delete? Please provide a name or ID." };
+      }
+      const deleted = contactService.delete(contactId);
+      if (!deleted) {
+        return { type: "clarify", question: `Contact ID ${contactId} not found.` };
+      }
+      return { type: "action", action: "deleted", contact_id: contactId };
     }
 
     case "list_contacts": {
@@ -794,7 +890,7 @@ export async function executeIntent(intent: Intent): Promise<Result> {
       if (intent.company_name) {
         const company = findCompanyByName(intent.company_name);
         if (!company) {
-          return { type: "clarify", question: `Which company did you mean by "${intent.company_name}"?` };
+          return { type: "clarify", question: `I couldn't find a company called '${intent.company_name}'. Would you like me to create it and then continue? <!--PENDING_INTENT:${JSON.stringify(intent)}-->` };
         }
         contacts = contacts.filter(c => c.company_id === company.id);
       }

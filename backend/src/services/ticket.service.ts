@@ -93,6 +93,13 @@ export const ticketService = {
       params.company_id = filters.company_id;
     }
 
+    if (filters.unassigned_contact) {
+      conditions.push("tickets.contact_id IS NULL");
+    } else if (filters.contact_id) {
+      conditions.push("tickets.contact_id = @contact_id");
+      params.contact_id = filters.contact_id;
+    }
+
     const whereClause =
       conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
 
